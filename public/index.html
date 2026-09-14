@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>RAG Chatbot</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; }
+    #chat { border: 1px solid #ddd; border-radius: 8px; padding: 16px; height: 400px; overflow-y: auto; margin-bottom: 12px; }
+    .msg { margin: 8px 0; padding: 8px 12px; border-radius: 8px; max-width: 80%; }
+    .user { background: #e8f0fe; margin-left: auto; }
+    .bot { background: #f1f1f1; }
+    .sources { font-size: 12px; color: #777; margin-top: 4px; }
+    form { display: flex; gap: 8px; }
+    input { flex: 1; padding: 10px; border-radius: 6px; border: 1px solid #ccc; }
+    button { padding: 10px 16px; border: none; border-radius: 6px; background: #1a73e8; color: white; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h2>Ask about the documents</h2>
+  <div id="chat"></div>
+  <form id="form">
+    <input id="input" placeholder="Type a question..." autocomplete="off" />
+    <button type="submit">Send</button>
+  </form>
+
+  <script>
+    const chat = document.getElementById('chat');
+    const form = document.getElementById('form');
+    const input = document.getElementById('input');
+
+    function addMessage(text, sender, sources) {
+      const div = document.createElement('div');
+      div.className = `msg ${sender}`;
+      div.textContent = text;
+      if (sources && sources.length) {
+        const s = document.createElement('div');
+        s.className = 'sources';
+        s.textContent = 'Sources: ' + sources.map(s => `${s.source} (${s.score.toFixed(2)})`).join(', ');
+        div.appendChild(s);
+      }
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const question = input.value.trim();
+      if (!question) return;
+      addMessage(question, 'user');
+      input.value = '';
+
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question }),
+      });
+      const data = await res.json();
+      addMessage(data.answer || data.error, 'bot', data.sources);
+    });
+  </script>
+</body>
+</html>
