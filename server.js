@@ -3,10 +3,11 @@ require("dotenv").config();
 const express = require("express");
 const { GoogleGenAI } = require("@google/genai");
 const { Pinecone } = require("@pinecone-database/pinecone");
+const { generateAnswer } = require('./generation');
 
 
 // ========================================
-// Gemini Configuration
+// Gemini Configuration (embeddings only now)
 // ========================================
 
 const ai = new GoogleGenAI({
@@ -33,12 +34,7 @@ const index = pc.index(
 
 const app = express();
 
-
-// Allow Express to read JSON request bodies
 app.use(express.json());
-
-
-// Serve files from the public folder
 app.use(express.static("public"));
 
 
@@ -47,10 +43,8 @@ app.use(express.static("public"));
 // ========================================
 
 // Simple in-memory conversation history.
-//
-// This is fine for a single-user demo.
-// Later, for multiple users, we can store
-// history separately for each user/session.
+// Fine for a single-user demo; for multiple users we'd key this
+// by session/user ID instead of one shared array.
 
 let conversationHistory = [];
 
@@ -68,9 +62,7 @@ async function embedQuery(text) {
     contents: [text],
 
     config: {
-      // IMPORTANT:
-      // Must match the Pinecone index
-      // and the embeddings used in ingest.js.
+      // Must match the Pinecone index and the embeddings used in ingest.js.
       outputDimensionality: 1536
     }
 
@@ -94,17 +86,10 @@ app.post("/api/chat", async (req, res) => {
 
     const { question } = req.body;
 
-
-    // Check if question exists
-
     if (!question || !question.trim()) {
-
       return res.status(400).json({
-
         error: "Question is required"
-
       });
-
     }
 
 
@@ -112,15 +97,9 @@ app.post("/api/chat", async (req, res) => {
     // 1. Convert question into embedding
     // ------------------------------------
 
-    const queryVector = await embedQuery(
-      question
-    );
+    const queryVector = await embedQuery(question);
 
-
-    console.log(
-      "Query vector dimension:",
-      queryVector.length
-    );
+    console.log("Query vector dimension:", queryVector.length);
 
 
     // ------------------------------------
@@ -128,13 +107,9 @@ app.post("/api/chat", async (req, res) => {
     // ------------------------------------
 
     const results = await index.query({
-
       vector: queryVector,
-
       topK: 3,
-
       includeMetadata: true
-
     });
 
 
@@ -143,9 +118,7 @@ app.post("/api/chat", async (req, res) => {
     // ------------------------------------
 
     const context = results.matches
-
       .map((match) => match.metadata.text)
-
       .join("\n\n---\n\n");
 
 
@@ -154,16 +127,11 @@ app.post("/api/chat", async (req, res) => {
     // ------------------------------------
 
     const historyText = conversationHistory
-
       .slice(-3)
-
       .map((turn) => {
-
         return `User: ${turn.question}
 Assistant: ${turn.answer}`;
-
       })
-
       .join("\n\n");
 
 
@@ -202,19 +170,12 @@ Answer:`;
 
 
     // ------------------------------------
-    // 6. Generate answer using Gemini
+    // 6. Generate answer (Groq -> OpenRouter -> Anthropic fallback chain)
     // ------------------------------------
 
-    const result = await ai.models.generateContent({
+    const { text, usedProvider } = await generateAnswer(prompt);
 
-      model: "gemini-3.6-flash",
-
-      contents: prompt
-
-    });
-
-
-    const answer = result.text;
+    const answer = text; // <-- was `result.text`, `result` no longer exists
 
 
     // ------------------------------------
@@ -222,11 +183,8 @@ Answer:`;
     // ------------------------------------
 
     conversationHistory.push({
-
       question: question,
-
       answer: answer
-
     });
 
 
@@ -235,31 +193,20 @@ Answer:`;
     // ------------------------------------
 
     res.json({
-
       answer: answer,
-
+      usedProvider: usedProvider, // which fallback model actually answered
       sources: results.matches.map((match) => ({
-
         source: match.metadata.source,
-
         score: match.score
-
       }))
-
     });
 
   } catch (error) {
 
-    console.error(
-      "❌ Chat error:",
-      error
-    );
-
+    console.error("❌ Chat error:", error);
 
     res.status(500).json({
-
       error: "Something went wrong while processing your question."
-
     });
 
   }
@@ -273,11 +220,6 @@ Answer:`;
 
 const PORT = process.env.PORT || 3000;
 
-
 app.listen(PORT, () => {
-
-  console.log(
-    `🚀 Server running on http://localhost:${PORT}`
-  );
-
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
 });

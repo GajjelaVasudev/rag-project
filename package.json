@@ -10,6 +10,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.125.0",
     "@google/genai": "^2.22.0",
     "@google/generative-ai": "^0.24.1",
     "@pinecone-database/pinecone": "^9.0.0",
